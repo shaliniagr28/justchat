@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: justchat
+      POSTGRES_USER: justchat
+      POSTGRES_PASSWORD: justchat
+    ports:
+      - "5432:5432"
+    volumes:
+      - justchat-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Backend depends on this passing before it starts - without it, Spring's first
+      # datasource connection attempt can race Postgres's own startup and fail on a cold
+      # `docker compose up` even though the container is technically "running".
+      test: ["CMD-SHELL", "pg_isready -U justchat"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: justchat
+      DB_USER: justchat
+      DB_PASSWORD: justchat
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  justchat-pgdata:

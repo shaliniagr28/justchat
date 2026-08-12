@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:justchat}
+    username: ${DB_USER:justchat}
+    password: ${DB_PASSWORD:justchat}
+  jpa:
+    hibernate:
+      # ddl-auto=update is fine for this take-home's time-box. In a real project this would be Flyway/Liquibase migrations instead.
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+logging:
+  level:
+    com.justchat: INFO

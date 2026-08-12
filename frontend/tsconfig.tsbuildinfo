@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/types.ts","./src/api/api.ts","./src/components/authform.tsx","./src/components/chatwindow.tsx","./src/components/header.tsx","./src/components/userlist.tsx","./src/hooks/usechatsocket.ts"],"version":"5.9.3"}
