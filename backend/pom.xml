@@ -21,11 +21,6 @@
   </properties>
 
   <dependencies>
-    <!-- Core web + WS: raw WebSocket handler support only. We deliberately do NOT use
-         spring-boot-starter-messaging / STOMP here, because that layer provides pub/sub
-         messaging semantics (@SendTo, SimpMessagingTemplate) which would be doing the
-         core real-time feature *for* us. We use only the low-level WebSocketHandler API
-         and build routing/registry/delivery ourselves on top of it. -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
