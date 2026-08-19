@@ -93,12 +93,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             WsEnvelope push = toMessageEnvelope(saved);
             boolean delivered = false;
             for (WebSocketSession recipientSession : registry.getSessions(in.recipientId)) {
-                // A session in the registry can still fail to send (half-dead connection
-                // that hasn't triggered a close event yet - see the ping/pong note in
-                // ConnectionRegistry's docs). We don't let one bad session stop us from
-                // marking delivery/telling other tabs; we just skip the failed one. Lazy
-                // eviction here (rather than proactive heartbeating) is a deliberate MVP
-                // scope cut.
                 try {
                     recipientSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(push)));
                     delivered = true;
