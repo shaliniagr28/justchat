@@ -6,6 +6,8 @@ public class MessageDto {
     public Long id;
     public Long senderId;
     public Long recipientId;
+    public Long groupId;
+    public boolean system;
     public String content;
     public String status;
     public String sentAt;
@@ -14,6 +16,8 @@ public class MessageDto {
         this.id = m.getId();
         this.senderId = m.getSenderId();
         this.recipientId = m.getRecipientId();
+        this.groupId = m.getGroupId();
+        this.system = m.isSystemMessage();
         this.content = m.getContent();
         this.status = m.getStatus().name();
         this.sentAt = m.getSentAt().toString();

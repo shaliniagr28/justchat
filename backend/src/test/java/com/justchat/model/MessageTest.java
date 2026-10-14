@@ -49,6 +49,17 @@ class MessageTest {
     }
 
     @Test
+    void aGroupSystemMessageIsFlaggedAndHasNoRecipient() {
+        Message message = Message.groupSystem(1L, 7L, "alice added bob");
+
+        assertThat(message.isSystemMessage()).isTrue();
+        assertThat(message.getGroupId()).isEqualTo(7L);
+        assertThat(message.getRecipientId()).isNull();
+        assertThat(message.getContent()).isEqualTo("alice added bob");
+        assertThat(Message.toGroup(1L, 7L, "hi").isSystemMessage()).isFalse();
+    }
+
+    @Test
     void markReadMovesDeliveredToReadAndStampsReadAt() {
         Message message = new Message(1L, 2L, "hi");
         message.markDelivered();

@@ -17,6 +17,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
            "ORDER BY m.id ASC")
     List<Message> findThreadBetween(@Param("userA") Long userA, @Param("userB") Long userB);
 
+    List<Message> findByGroupIdOrderByIdAsc(Long groupId);
+
     List<Message> findByRecipientIdAndStatus(Long recipientId, MessageStatus status);
 
     List<Message> findByRecipientIdAndSenderIdAndStatusInAndIdLessThanEqual(

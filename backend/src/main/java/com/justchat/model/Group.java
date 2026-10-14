@@ -18,11 +18,16 @@ public class Group {
     @Column(nullable = false)
     private String groupName;
 
+    // Only the creator may add members. Nullable so groups created before this column
+    // existed still load; such a group has no one who can add members.
+    private Long createdBy;
+
     Group(){
 
     }
-    public Group(String groupName) {
+    public Group(String groupName, Long createdBy) {
         this.groupName = groupName;
+        this.createdBy = createdBy;
     }
 
     public Long getId() {
@@ -31,5 +36,9 @@ public class Group {
 
     public String getGroupName() {
         return groupName;
+    }
+
+    public Long getCreatedBy() {
+        return createdBy;
     }
 }

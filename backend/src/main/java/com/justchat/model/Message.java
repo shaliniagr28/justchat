@@ -27,6 +27,11 @@ public class Message {
 
     private Long groupId;
 
+    // A group event shown as a line in the chat (e.g. "alice added bob") rather than a chat
+    // message. DB default so ddl-auto=update can add the column to a table that has rows.
+    @Column(nullable = false, columnDefinition = "boolean not null default false")
+    private boolean systemMessage;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
@@ -55,10 +60,17 @@ public class Message {
         return message;
     }
 
+    public static Message groupSystem(Long actorId, Long groupId, String text) {
+        Message message = toGroup(actorId, groupId, text);
+        message.systemMessage = true;
+        return message;
+    }
+
     public Long getId() { return id; }
     public Long getSenderId() { return senderId; }
     public Long getRecipientId() { return recipientId; }
     public Long getGroupId() { return groupId; }
+    public boolean isSystemMessage() { return systemMessage; }
     public String getContent() { return content; }
     public MessageStatus getStatus() { return status; }
     public Instant getSentAt() { return sentAt; }
