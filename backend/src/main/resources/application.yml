@@ -15,7 +15,29 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+  sql:
+    init:
+      # Runs schema.sql on every start (default is embedded DBs only) - see that file.
+      mode: always
 
 logging:
   level:
     com.justchat: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      # Adds an "application" label to every metric
+      application: justchat
+    distribution:
+      percentiles-histogram:
+        # Needed for p95/p99 latency in Grafana
+        "[http.server.requests]": true

@@ -4,12 +4,22 @@ import type { ChatMessage, User, WsEnvelope } from '../types';
 const RECONNECT_DELAY_MS = 2000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
+// Status only ever moves forward; a late or out-of-order STATUS_UPDATE must not undo READ.
+const STATUS_RANK: Record<ChatMessage['status'], number> = { SENT: 0, DELIVERED: 1, READ: 2 };
+
+// "Active" = this tab is visible and the browser window has focus. Messages only count as
+// read while this is true, so a background tab or minimized window leaves them DELIVERED.
+function isWindowActive() {
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
+
 export function useChatSocket(currentUser: User | null, selectedUserId: number | null = null) {
   const [connected, setConnected] = useState(false);
   const [conversations, setConversations] = useState<Map<number, ChatMessage[]>>(new Map());
   // unreadCounts: otherUserId -> messages received while that thread wasn't the selected one.
   // Session-only - not persisted, resets on reload.
   const [unreadCounts, setUnreadCounts] = useState<Map<number, number>>(new Map());
+  const [windowActive, setWindowActive] = useState(isWindowActive);
   const wsRef = useRef<WebSocket | null>(null);
   const attemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,6 +56,7 @@ export function useChatSocket(currentUser: User | null, selectedUserId: number |
       for (const [key, list] of next) {
         const idx = list.findIndex(m => m.id === id);
         if (idx !== -1) {
+          if (STATUS_RANK[status] <= STATUS_RANK[list[idx].status]) return prev;
           const updated = [...list];
           updated[idx] = { ...updated[idx], status };
           next.set(key, updated);
@@ -135,6 +146,34 @@ export function useChatSocket(currentUser: User | null, selectedUserId: number |
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    const update = () => setWindowActive(isWindowActive());
+    window.addEventListener('focus', update);
+    window.addEventListener('blur', update);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      window.removeEventListener('focus', update);
+      window.removeEventListener('blur', update);
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
+
+  // Read receipts: whenever the open conversation has messages from the other person that
+  // aren't READ yet, and the window is active, tell the server we've read up to the newest
+  // one we're showing. Marking them READ locally too stops this from re-firing.
+  useEffect(() => {
+    if (!currentUser || selectedUserId == null || !windowActive || !connected) return;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const unread = (conversations.get(selectedUserId) ?? [])
+      .filter(m => m.senderId === selectedUserId && m.status !== 'READ');
+    if (unread.length === 0) return;
+    const upToId = Math.max(...unread.map(m => m.id));
+    ws.send(JSON.stringify({ type: 'READ', senderId: selectedUserId, id: upToId }));
+    upsertMessage(selectedUserId, list => list.map(m =>
+      m.senderId === selectedUserId && m.id <= upToId && m.status !== 'READ' ? { ...m, status: 'READ' } : m));
+  }, [currentUser, selectedUserId, windowActive, connected, conversations, upsertMessage]);
 
   const sendMessage = useCallback((recipientId: number, content: string) => {
     if (!currentUser || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;

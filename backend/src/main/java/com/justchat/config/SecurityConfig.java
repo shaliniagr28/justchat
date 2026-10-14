@@ -56,7 +56,7 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .securityContext(sc -> sc.securityContextRepository(contextRepository))
             .authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                    .requestMatchers("/api/auth/register", "/api/auth/login", "/actuator/health/**", "/actuator/prometheus").permitAll()
                     .anyRequest().authenticated()
             )
             .httpBasic(basic -> basic.disable())

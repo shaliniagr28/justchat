@@ -20,8 +20,12 @@ public class Message {
     @Column(nullable = false)
     private Long senderId;
 
-    @Column(nullable = false)
+    // Null for group messages, which carry groupId instead. Keeping the two apart means every
+    // 1:1 query (thread, backlog, read receipts) matches on recipientId and can never pick up
+    // a group message just because a group id happens to equal a user id.
     private Long recipientId;
+
+    private Long groupId;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
@@ -35,6 +39,8 @@ public class Message {
 
     private Instant deliveredAt;
 
+    private Instant readAt;
+
     public Message() {}
 
     public Message(Long senderId, Long recipientId, String content) {
@@ -43,18 +49,36 @@ public class Message {
         this.content = content;
     }
 
+    public static Message toGroup(Long senderId, Long groupId, String content) {
+        Message message = new Message(senderId, null, content);
+        message.groupId = groupId;
+        return message;
+    }
+
     public Long getId() { return id; }
     public Long getSenderId() { return senderId; }
     public Long getRecipientId() { return recipientId; }
+    public Long getGroupId() { return groupId; }
     public String getContent() { return content; }
     public MessageStatus getStatus() { return status; }
     public Instant getSentAt() { return sentAt; }
     public Instant getDeliveredAt() { return deliveredAt; }
+    public Instant getReadAt() { return readAt; }
 
     public void markDelivered() {
         if (this.status == MessageStatus.SENT) {
             this.status = MessageStatus.DELIVERED;
             this.deliveredAt = Instant.now();
         }
+    }
+
+    // Read implies delivered, so a message the recipient somehow reads while still SENT
+    // (e.g. seen via REST history before the backlog replay marked it) gets both stamps.
+    public void markRead() {
+        if (this.status == MessageStatus.READ) return;
+        Instant now = Instant.now();
+        if (this.deliveredAt == null) this.deliveredAt = now;
+        this.status = MessageStatus.READ;
+        this.readAt = now;
     }
 }

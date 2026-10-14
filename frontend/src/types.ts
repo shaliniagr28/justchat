@@ -3,7 +3,7 @@ export interface User {
   username: string;
 }
 
-export type MessageStatus = 'SENT' | 'DELIVERED';
+export type MessageStatus = 'SENT' | 'DELIVERED' | 'READ';
 
 export interface ChatMessage {
   id: number;
@@ -17,7 +17,7 @@ export interface ChatMessage {
 }
 
 export interface WsEnvelope {
-  type: 'SEND' | 'MESSAGE' | 'STATUS_UPDATE' | 'BACKLOG_DONE' | 'ERROR';
+  type: 'SEND' | 'READ' | 'MESSAGE' | 'STATUS_UPDATE' | 'BACKLOG_DONE' | 'ERROR';
   id?: number;
   senderId?: number;
   recipientId?: number;

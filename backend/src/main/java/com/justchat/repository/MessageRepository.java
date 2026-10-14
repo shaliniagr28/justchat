@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
@@ -17,4 +18,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findThreadBetween(@Param("userA") Long userA, @Param("userB") Long userB);
 
     List<Message> findByRecipientIdAndStatus(Long recipientId, MessageStatus status);
+
+    List<Message> findByRecipientIdAndSenderIdAndStatusInAndIdLessThanEqual(
+            Long recipientId, Long senderId, Collection<MessageStatus> statuses, Long maxId);
 }

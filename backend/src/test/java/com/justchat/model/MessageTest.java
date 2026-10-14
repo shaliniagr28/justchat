@@ -38,4 +38,56 @@ class MessageTest {
         assertThat(message.getStatus()).isEqualTo(MessageStatus.DELIVERED);
         assertThat(message.getDeliveredAt()).isEqualTo(firstDeliveredAt);
     }
+
+    @Test
+    void aGroupMessageCarriesTheGroupIdAndHasNoRecipient() {
+        Message message = Message.toGroup(1L, 7L, "hey all");
+
+        assertThat(message.getGroupId()).isEqualTo(7L);
+        assertThat(message.getRecipientId()).isNull();
+        assertThat(message.getSenderId()).isEqualTo(1L);
+    }
+
+    @Test
+    void markReadMovesDeliveredToReadAndStampsReadAt() {
+        Message message = new Message(1L, 2L, "hi");
+        message.markDelivered();
+
+        message.markRead();
+
+        assertThat(message.getStatus()).isEqualTo(MessageStatus.READ);
+        assertThat(message.getReadAt()).isNotNull();
+    }
+
+    @Test
+    void markReadOnAMessageStillSentAlsoStampsDeliveredAt() {
+        Message message = new Message(1L, 2L, "hi");
+
+        message.markRead();
+
+        assertThat(message.getStatus()).isEqualTo(MessageStatus.READ);
+        assertThat(message.getDeliveredAt()).isNotNull();
+        assertThat(message.getReadAt()).isNotNull();
+    }
+
+    @Test
+    void markReadIsANoOpOnceAlreadyRead() {
+        Message message = new Message(1L, 2L, "hi");
+        message.markRead();
+        var firstReadAt = message.getReadAt();
+
+        message.markRead();
+
+        assertThat(message.getReadAt()).isEqualTo(firstReadAt);
+    }
+
+    @Test
+    void markDeliveredNeverMovesAReadMessageBackToDelivered() {
+        Message message = new Message(1L, 2L, "hi");
+        message.markRead();
+
+        message.markDelivered();
+
+        assertThat(message.getStatus()).isEqualTo(MessageStatus.READ);
+    }
 }
