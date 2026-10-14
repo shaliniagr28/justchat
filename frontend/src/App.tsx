@@ -9,6 +9,7 @@ import ChatWindow from './components/ChatWindow';
 import Sidebar, { type SidebarTab } from './components/Sidebar';
 import GroupList from './components/GroupList';
 import GroupChatWindow from './components/GroupChatWindow';
+import { acceptDetail } from './lib/groupSelection';
 
 type Selection = { kind: 'user'; user: User } | { kind: 'group'; group: Group } | null;
 
@@ -51,16 +52,18 @@ export default function App() {
   // Opening a group (or reconnecting while one is open) loads its members and full history.
   // History is merged, not replaced, so live messages that arrive meanwhile survive.
   const selectedGroupId = selectedGroup?.id ?? null;
+  const selectedGroupIdRef = useRef(selectedGroupId);
+  selectedGroupIdRef.current = selectedGroupId;
+  const showDetail = (d: GroupDetail) => setGroupDetail(cur => acceptDetail(cur, d, selectedGroupIdRef.current));
   useEffect(() => {
     if (selectedGroupId == null) {
       setGroupDetail(null);
       return;
     }
-    let cancelled = false;
     setGroupDetail(prev => (prev?.id === selectedGroupId ? prev : null));
-    api.groupDetail(selectedGroupId).then(d => { if (!cancelled) setGroupDetail(d); }).catch(console.error);
+    api.groupDetail(selectedGroupId).then(showDetail).catch(console.error);
     api.groupMessages(selectedGroupId).then(h => mergeGroupHistory(selectedGroupId, h)).catch(console.error);
-    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGroupId, connectionEpoch, mergeGroupHistory]);
 
   // A new "X added Y" line in the open group means the member list changed - refresh it.
@@ -71,7 +74,8 @@ export default function App() {
     const last = lastSystemCount.current;
     lastSystemCount.current = { groupId: selectedGroupId, count: systemCount };
     if (selectedGroupId == null || last.groupId !== selectedGroupId || systemCount <= last.count) return;
-    api.groupDetail(selectedGroupId).then(setGroupDetail).catch(console.error);
+    api.groupDetail(selectedGroupId).then(showDetail).catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGroupId, systemCount]);
 
   if (checkingSession) return null;
@@ -89,6 +93,7 @@ export default function App() {
 
   const handleGroupCreated = (created: GroupDetail) => {
     setGroups(prev => [...prev, created]);
+    selectedGroupIdRef.current = created.id;
     setGroupDetail(created);
     setSelection({ kind: 'group', group: created });
   };
@@ -103,14 +108,14 @@ export default function App() {
         onSend={(content) => sendMessage(selectedUser.id, content)}
       />
     );
-  } else if (selectedGroup && groupDetail) {
+  } else if (selectedGroup && groupDetail?.id === selectedGroup.id) {
     main = (
       <GroupChatWindow
         currentUser={currentUser}
         detail={groupDetail}
         messages={groupMessages}
         onSend={(content) => sendGroupMessage(selectedGroup.id, content)}
-        onDetailChange={setGroupDetail}
+        onDetailChange={showDetail}
       />
     );
   } else {

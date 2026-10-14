@@ -65,6 +65,16 @@ export function useChatSocket(
   const attemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intentionalCloseRef = useRef(false);
+  // Everything here belongs to one signed-in user. This hook stays mounted across logout and
+  // login in the same tab, so start each user from empty rather than inheriting the last
+  // user's messages and unread badges.
+  useEffect(() => {
+    setConversations(new Map());
+    setUnreadCounts(new Map());
+    setGroupConversations(new Map());
+    setGroupUnreadCounts(new Map());
+  }, [currentUser?.id]);
+
   const selectedUserIdRef = useRef(selectedUserId);
   useEffect(() => {
     selectedUserIdRef.current = selectedUserId;
