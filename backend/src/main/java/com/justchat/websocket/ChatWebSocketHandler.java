@@ -2,12 +2,10 @@ package com.justchat.websocket;
 
 import com.justchat.dto.WsEnvelope;
 import com.justchat.metrics.ChatMetrics;
-import com.justchat.model.GroupMembers;
 import com.justchat.model.Message;
 import com.justchat.model.User;
-import com.justchat.repository.GroupMemberRepository;
-import com.justchat.repository.GroupRepository;
 import com.justchat.repository.UserRepository;
+import com.justchat.service.GroupService;
 import com.justchat.service.MessageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Timer;
@@ -40,16 +38,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final MessageService messageService;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
-    private final GroupMemberRepository groupMemberRepository;
+    private final GroupService groupService;
+    private final UserPusher pusher;
     private final ChatMetrics metrics;
 
     public ChatWebSocketHandler(ConnectionRegistry registry, MessageService messageService,
-            UserRepository userRepository, GroupMemberRepository groupMemberRepository, ObjectMapper objectMapper,
+            UserRepository userRepository, GroupService groupService, UserPusher pusher, ObjectMapper objectMapper,
             ChatMetrics metrics) {
         this.registry = registry;
         this.messageService = messageService;
         this.userRepository = userRepository;
-        this.groupMemberRepository = groupMemberRepository;
+        this.groupService = groupService;
+        this.pusher = pusher;
         this.objectMapper = objectMapper;
         this.metrics = metrics;
     }
@@ -67,7 +67,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         List<Message> backlog = messageService.findUndelivered(userId);
         for (Message m : backlog) {
-            sendToSession(outbound, toMessageEnvelope(m));
+            sendToSession(outbound, WsEnvelope.fromMessage(m));
             Message updated = messageService.markDelivered(m.getId());
             metrics.deliveredFromBacklog();
             notifySenderOfStatus(updated);
@@ -99,28 +99,26 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    // Membership is checked before persisting, so a hand-crafted SEND from a non-member is
+    // rejected with nothing stored or pushed. Fan-out reads the member list per send.
     private void handleGroupSend(WebSocketSession session, Long senderId, Long groupId, WsEnvelope in) throws IOException {
+        if (in.content == null || in.content.isBlank()) {
+            sendError(session, "SEND requires content");
+            return;
+        }
+        if (!groupService.isMember(groupId, senderId)) {
+            sendError(session, "Not a member of this group");
+            return;
+        }
         Message saved = messageService.persistNewGroupMessage(senderId, groupId, in.content);
         metrics.groupMessageSent();
-        WsEnvelope echo = toMessageEnvelope(saved);
+        WsEnvelope echo = WsEnvelope.fromMessage(saved);
         echo.clientMsgId = in.clientMsgId;
         sendToSession(session, echo);
-        List<GroupMembers> groupMembers = groupMemberRepository.findByGroupId(groupId);
-        for (GroupMembers member : groupMembers) {
-            if (member.getUserId().equals(senderId)) {
-                continue; // Skip sending to the sender
-            }
-            WsEnvelope push = toMessageEnvelope(saved);
-            for (WebSocketSession recipientSession : registry.getSessions(member.getUserId())) {
-                try {
-                    recipientSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(push)));
-                } catch (IOException | SessionLimitExceededException e) {
-                    log.warn("Failed pushing to a session for userId={}, evicting it", member.getUserId());
-                    metrics.pushFailed();
-                    registry.unregister(member.getUserId(), recipientSession);
-                }
-            }
-        }
+        List<Long> otherMembers = groupService.memberIds(groupId).stream()
+                .filter(id -> !id.equals(senderId))
+                .toList();
+        pusher.pushToUsers(otherMembers, WsEnvelope.fromMessage(saved));
     }
 
     private void handleSend(WebSocketSession session, Long senderId, WsEnvelope in) throws IOException {
@@ -155,12 +153,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         // local render (shown instantly on send) can be reconciled with the real row
         // via
         // clientMsgId, rather than trusting its own guess at an id.
-        WsEnvelope echo = toMessageEnvelope(saved);
+        WsEnvelope echo = WsEnvelope.fromMessage(saved);
         echo.clientMsgId = in.clientMsgId;
         sendToSession(session, echo);
 
         if (registry.isOnline(in.recipientId)) {
-            WsEnvelope push = toMessageEnvelope(saved);
+            WsEnvelope push = WsEnvelope.fromMessage(saved);
             boolean delivered = false;
             for (WebSocketSession recipientSession : registry.getSessions(in.recipientId)) {
                 try {
@@ -228,18 +226,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalStateException("Authenticated username not found: " + username));
         return user.getId();
-    }
-
-    private WsEnvelope toMessageEnvelope(Message m) {
-        WsEnvelope e = WsEnvelope.type("MESSAGE");
-        e.id = m.getId();
-        e.senderId = m.getSenderId();
-        e.recipientId = m.getRecipientId();
-        e.groupId = m.getGroupId();
-        e.content = m.getContent();
-        e.status = m.getStatus().name();
-        e.sentAt = m.getSentAt().toString();
-        return e;
     }
 
     private void sendToSession(WebSocketSession session, WsEnvelope envelope) throws IOException {

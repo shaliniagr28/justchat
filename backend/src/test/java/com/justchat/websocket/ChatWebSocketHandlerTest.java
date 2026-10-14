@@ -5,9 +5,8 @@ import com.justchat.dto.WsEnvelope;
 import com.justchat.metrics.ChatMetrics;
 import com.justchat.model.Message;
 import com.justchat.model.User;
-import com.justchat.repository.GroupMemberRepository;
-import com.justchat.repository.GroupRepository;
 import com.justchat.repository.UserRepository;
+import com.justchat.service.GroupService;
 import com.justchat.service.MessageService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,7 +45,8 @@ class ChatWebSocketHandlerTest {
     private final ConnectionRegistry registry = mock(ConnectionRegistry.class);
     private final MessageService messageService = mock(MessageService.class);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final GroupMemberRepository groupMemberRepository = mock(GroupMemberRepository.class);
+    private final GroupService groupService = mock(GroupService.class);
+    private final UserPusher pusher = mock(UserPusher.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
 
@@ -54,7 +54,7 @@ class ChatWebSocketHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ChatWebSocketHandler(registry, messageService, userRepository, groupMemberRepository, objectMapper,
+        handler = new ChatWebSocketHandler(registry, messageService, userRepository, groupService, pusher, objectMapper,
                 new ChatMetrics(meters, registry));
     }
 
@@ -344,45 +344,55 @@ class ChatWebSocketHandlerTest {
     // ---- handleTextMessage: SEND to a group ----
 
     @Test
-    void sendingToAGroupStoresAGroupMessageAndPushesToEveryOtherMember() throws Exception {
+    void sendingToAGroupEchoesToSenderAndPushesToOtherMembersOnly() throws Exception {
         WebSocketSession aliceSession = sessionWithAttributes(attrs("userId", 1L));
-        WebSocketSession bobSession = mock(WebSocketSession.class);
         Message saved = groupMessageWithId(5L, 1L, 7L, "hey all");
+        when(groupService.isMember(7L, 1L)).thenReturn(true);
         when(messageService.persistNewGroupMessage(1L, 7L, "hey all")).thenReturn(saved);
-        when(groupMemberRepository.findByGroupId(7L)).thenReturn(List.of(
-                new com.justchat.model.GroupMembers(7L, 1L), new com.justchat.model.GroupMembers(7L, 2L)));
-        when(registry.getSessions(2L)).thenReturn(Set.of(bobSession));
+        when(groupService.memberIds(7L)).thenReturn(List.of(1L, 2L, 3L));
 
         handler.handleTextMessage(aliceSession, json(Map.of(
                 "type", "SEND", "groupId", 7, "content", "hey all", "clientMsgId", "abc")));
 
         verify(messageService, never()).persistNewMessage(any(), any(), any());
-        List<WsEnvelope> toBob = sentTo(bobSession);
-        assertThat(toBob).hasSize(1);
-        assertThat(toBob.get(0).groupId).isEqualTo(7L);
-        assertThat(toBob.get(0).recipientId).isNull();
-        assertThat(sentTo(aliceSession)).extracting(e -> e.clientMsgId).containsExactly("abc");
-        verify(registry, never()).getSessions(1L);
+        List<WsEnvelope> toAlice = sentTo(aliceSession);
+        assertThat(toAlice).hasSize(1);
+        assertThat(toAlice.get(0).clientMsgId).isEqualTo("abc");
+        assertThat(toAlice.get(0).groupId).isEqualTo(7L);
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Collection<Long>> ids = org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+        org.mockito.ArgumentCaptor<WsEnvelope> pushed = org.mockito.ArgumentCaptor.forClass(WsEnvelope.class);
+        verify(pusher).pushToUsers(ids.capture(), pushed.capture());
+        assertThat(ids.getValue()).containsExactly(2L, 3L);
+        assertThat(pushed.getValue().groupId).isEqualTo(7L);
+        assertThat(pushed.getValue().recipientId).isNull();
+        assertThat(pushed.getValue().clientMsgId).isNull();
     }
 
     @Test
-    void aFailedPushToOneGroupMemberEvictsThatMembersSessionAndStillReachesTheRest() throws Exception {
+    void sendingToAGroupYouAreNotInIsRejectedWithoutPersisting() throws Exception {
+        WebSocketSession outsiderSession = sessionWithAttributes(attrs("userId", 1L));
+        when(groupService.isMember(7L, 1L)).thenReturn(false);
+
+        handler.handleTextMessage(outsiderSession, json(Map.of("type", "SEND", "groupId", 7, "content", "let me in")));
+
+        List<WsEnvelope> sent = sentTo(outsiderSession);
+        assertThat(sent).extracting(e -> e.type).containsExactly("ERROR");
+        assertThat(sent.get(0).error).isEqualTo("Not a member of this group");
+        verify(messageService, never()).persistNewGroupMessage(any(), any(), any());
+        verifyNoInteractions(pusher);
+    }
+
+    @Test
+    void sendingBlankContentToAGroupIsRejected() throws Exception {
         WebSocketSession aliceSession = sessionWithAttributes(attrs("userId", 1L));
-        WebSocketSession deadBobSession = mock(WebSocketSession.class);
-        WebSocketSession carolSession = mock(WebSocketSession.class);
-        doThrow(new IOException("broken pipe")).when(deadBobSession).sendMessage(any());
-        when(messageService.persistNewGroupMessage(1L, 7L, "hey")).thenReturn(groupMessageWithId(5L, 1L, 7L, "hey"));
-        when(groupMemberRepository.findByGroupId(7L)).thenReturn(List.of(
-                new com.justchat.model.GroupMembers(7L, 1L),
-                new com.justchat.model.GroupMembers(7L, 2L),
-                new com.justchat.model.GroupMembers(7L, 3L)));
-        when(registry.getSessions(2L)).thenReturn(Set.of(deadBobSession));
-        when(registry.getSessions(3L)).thenReturn(Set.of(carolSession));
+        when(groupService.isMember(7L, 1L)).thenReturn(true);
 
-        handler.handleTextMessage(aliceSession, json(Map.of("type", "SEND", "groupId", 7, "content", "hey")));
+        handler.handleTextMessage(aliceSession, json(Map.of("type", "SEND", "groupId", 7, "content", "   ")));
 
-        verify(registry).unregister(2L, deadBobSession);
-        assertThat(sentTo(carolSession)).hasSize(1);
+        assertThat(sentTo(aliceSession)).extracting(e -> e.type).containsExactly("ERROR");
+        verify(messageService, never()).persistNewGroupMessage(any(), any(), any());
+        verifyNoInteractions(pusher);
     }
 
     // ---- handleTextMessage: READ ----
