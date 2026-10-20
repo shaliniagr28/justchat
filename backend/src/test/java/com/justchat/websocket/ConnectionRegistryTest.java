@@ -94,4 +94,14 @@ class ConnectionRegistryTest {
         assertThat(registry.isOnline(2L)).isTrue();
         assertThat(registry.getSessions(2L)).containsExactly(sessionB);
     }
+
+    @Test
+    void countsDistinctOnlineUsersAndTotalSessionsSeparately() {
+        registry.register(1L, mock(WebSocketSession.class));
+        registry.register(1L, mock(WebSocketSession.class));
+        registry.register(2L, mock(WebSocketSession.class));
+
+        assertThat(registry.onlineUserCount()).isEqualTo(2);
+        assertThat(registry.sessionCount()).isEqualTo(3);
+    }
 }

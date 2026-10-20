@@ -1,4 +1,4 @@
-# JustChat - real-time 1:1 chat (MVP)
+# JustChat - real-time 1:1 and group chat (MVP)
 
 A real-time 1:1 chat application. The delivery protocol(`routing, delivery status, offline queuing, reconnect replay`) is custom-built on a raw WebSocket handler.
 
@@ -8,9 +8,10 @@ A real-time 1:1 chat application. The delivery protocol(`routing, delivery statu
 - **User search** - `GET /api/users?q=` looks up other registered users by username (`UserController`)
 - **Chat interface** - React chat window per selected user (`ChatWindow.tsx`), with optimistic send + server reconciliation
 - **Chat history** - REST-fetched thread (`GET /api/messages/thread/{otherUserId}`) seeds each conversation when it's opened
-- **Delivery status** - per-message ticks, sent vs. delivered (`MessageStatus`), pushed live over the socket when the recipient is online
+- **Delivery status and read receipts** - per-message `✓ Sent` / `✓✓ Delivered` / `✓✓ Read` on 1:1 messages (`MessageStatus`), pushed live over the socket. A message counts as read only while the recipient has that conversation open in a visible, focused window
 - **Offline delivery + backlog replay** - messages persist even if the recipient is offline, undelivered messages replay on reconnect, terminated by a `BACKLOG_DONE` frame
 - **Unread message indicator** - per-user badge in the user list counting messages received while that thread wasn't open (`useChatSocket`), clearing when the thread is selected
+- **Group chat** - a People | Groups sidebar. Anyone can create a group; only its creator adds members, by username (`GroupController`, `GroupService`). Members see the group's full history, messages fan out live to every member's open sessions, and adding someone posts an "alice added bob" line. Only members can read or post - checked on both REST and the WebSocket. Group messages have no delivered/read status
 
 ## Architecture & Tech Stack
 
@@ -71,7 +72,7 @@ different users, search for each other, and message back and forth.
 ## Assumptions
 
 The following scope decisions define the current boundaries of the product and is worth revisiting as requirements evolve:
-1. The number of users in a chat room is 1 - the MVP only supports one-to-one chat.
+1. Chats are 1:1 or groups. Groups can't be renamed, deleted or left, and members can't be removed; only the creator adds members.
 2. Users register themselves (username + password) and can search for any other registered user.
 3. Messages are not editable or deletable, every sent message is persisted permanently.
 4. The user is not able to see the typing status of the other user.
@@ -80,7 +81,8 @@ The following scope decisions define the current boundaries of the product and i
 7. The platform is used in a webpage only.
 8. Delivery is at-least-once, not exactly-once - if a push succeeds on the wire but the client crashes before rendering/acking it, there's no mechanism here to detect that gap.
 9. Single backend instance only - `ConnectionRegistry` is an in-memory map inside one JVM, and message ordering relies on that too.
-10. Unread counts are session-only, tracked purely client-side in `useChatSocket` - they reset on page refresh/re-login. The backend has no read/seen concept (`MessageStatus` is only `SENT`/`DELIVERED`), so a count that survives a reload would need new schema/API work - out of scope for this MVP.
+10. Unread counts (people and groups) are session-only, tracked purely client-side in `useChatSocket` - they reset on page refresh/re-login.
+11. Group messages are not queued for offline members over the socket. A member who was offline sees everything when they open the group (REST history), and the open group's history is re-fetched after a reconnect.
 
 ## Testing decisions
 
@@ -109,8 +111,8 @@ The following scope decisions define the current boundaries of the product and i
 
 | Feature                              | Description                                                                                                     |
 |----------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| Group chats                           | Multiple users interacting in one conversation, instead of 1:1 only                                              |
+| Group management                      | Rename/delete groups, leave a group, remove members, more than one admin                                         |
 | Typing indicators                     | Show typing status when the other user is actively composing a message                                          |
 | Message pagination                    | Load conversation history in pages instead of the full thread on open                                            |
 | Message editing/deletion              | Let a user edit or delete a message they sent                                                                    |
-| Persistent unread counts / read receipts | Add a `READ`/seen concept to `Message`/`MessageStatus` plus a "mark as read" call, so unread badges survive a page reload instead of resetting each session |
+| Persistent unread counts               | Derive badges from server-side read state so they survive a page reload instead of resetting each session         |

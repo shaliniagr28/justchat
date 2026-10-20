@@ -1,4 +1,4 @@
-import type { User, ChatMessage } from '../types';
+import type { User, ChatMessage, Group, GroupDetail } from '../types';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
@@ -27,5 +27,17 @@ export const api = {
 
   listUsers: (q?: string) => request<User[]>(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
 
-  thread: (otherUserId: number) => request<ChatMessage[]>(`/api/messages/thread/${otherUserId}`)
+  thread: (otherUserId: number) => request<ChatMessage[]>(`/api/messages/thread/${otherUserId}`),
+
+  listGroups: () => request<Group[]>('/api/groups'),
+
+  createGroup: (groupName: string) =>
+    request<GroupDetail>('/api/groups', { method: 'POST', body: JSON.stringify({ groupName }) }),
+
+  groupDetail: (groupId: number) => request<GroupDetail>(`/api/groups/${groupId}`),
+
+  addGroupMember: (groupId: number, username: string) =>
+    request<GroupDetail>(`/api/groups/${groupId}/members`, { method: 'POST', body: JSON.stringify({ username }) }),
+
+  groupMessages: (groupId: number) => request<ChatMessage[]>(`/api/groups/${groupId}/messages`)
 };

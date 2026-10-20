@@ -27,8 +27,9 @@ export default function ChatWindow({
   const statusTick = (m: ChatMessage): { text: string; color?: string } | null => {
     if (m.senderId !== currentUser.id) return null;
     if (m.pending) return { text: '…' };
-    if (m.status === 'DELIVERED') return { text: '✓✓' };
-    return { text: '✓' };
+    if (m.status === 'READ') return { text: '✓✓ Read', color: '#9fe8ff' };
+    if (m.status === 'DELIVERED') return { text: '✓✓ Delivered' };
+    return { text: '✓ Sent' };
   };
 
   return (
