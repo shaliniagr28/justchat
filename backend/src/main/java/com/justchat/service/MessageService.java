@@ -21,11 +21,26 @@ public class MessageService {
         return messageRepository.save(message);
     }
 
+    public Message persistNewGroupMessage(Long senderId, Long groupId, String content) {
+        return messageRepository.save(Message.toGroup(senderId, groupId, content));
+    }
+
     public Message markDelivered(Long messageId) {
         Message message = messageRepository.findById(messageId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown message id: " + messageId));
         message.markDelivered();
         return messageRepository.save(message);
+    }
+
+    // Marks everything readerId has received from senderId, up to and including upToId, as
+    // READ. The upper bound is the newest message the reader's client actually rendered,
+    // so a message that arrives while this READ frame is in flight isn't marked read unseen.
+    public List<Message> markThreadRead(Long readerId, Long senderId, Long upToId) {
+        List<Message> unread = messageRepository.findByRecipientIdAndSenderIdAndStatusInAndIdLessThanEqual(
+                readerId, senderId, List.of(MessageStatus.SENT, MessageStatus.DELIVERED), upToId);
+        if (unread.isEmpty()) return unread;
+        unread.forEach(Message::markRead);
+        return messageRepository.saveAll(unread);
     }
 
     public List<Message> findUndelivered(Long recipientId) {

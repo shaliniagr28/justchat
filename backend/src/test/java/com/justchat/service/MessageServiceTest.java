@@ -45,6 +45,16 @@ class MessageServiceTest {
     }
 
     @Test
+    void persistNewGroupMessageSavesItAgainstTheGroupNotARecipient() {
+        when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message saved = messageService.persistNewGroupMessage(1L, 7L, "hey all");
+
+        assertThat(saved.getGroupId()).isEqualTo(7L);
+        assertThat(saved.getRecipientId()).isNull();
+    }
+
+    @Test
     void markDeliveredFlipsStatusAndPersistsTheUpdatedRow() {
         Message message = new Message(1L, 2L, "hi");
         setId(message, 42L);
@@ -89,6 +99,34 @@ class MessageServiceTest {
 
         assertThat(result).containsExactly(threadMessage);
         verify(messageRepository).findThreadBetween(1L, 2L);
+    }
+
+    @Test
+    void markThreadReadMarksUnreadMessagesFromThatSenderUpToTheGivenIdAndReturnsThem() {
+        Message delivered = new Message(2L, 1L, "one");
+        delivered.markDelivered();
+        Message stillSent = new Message(2L, 1L, "two");
+        when(messageRepository.findByRecipientIdAndSenderIdAndStatusInAndIdLessThanEqual(
+                1L, 2L, List.of(MessageStatus.SENT, MessageStatus.DELIVERED), 7L))
+                .thenReturn(List.of(delivered, stillSent));
+        when(messageRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<Message> result = messageService.markThreadRead(1L, 2L, 7L);
+
+        assertThat(result).containsExactly(delivered, stillSent);
+        assertThat(result).allMatch(m -> m.getStatus() == MessageStatus.READ);
+        verify(messageRepository).saveAll(List.of(delivered, stillSent));
+    }
+
+    @Test
+    void markThreadReadWithNothingUnreadSavesNothing() {
+        when(messageRepository.findByRecipientIdAndSenderIdAndStatusInAndIdLessThanEqual(
+                any(), any(), any(), any())).thenReturn(List.of());
+
+        List<Message> result = messageService.markThreadRead(1L, 2L, 7L);
+
+        assertThat(result).isEmpty();
+        verify(messageRepository, never()).saveAll(any());
     }
 
     private void setId(Message message, Long id) {

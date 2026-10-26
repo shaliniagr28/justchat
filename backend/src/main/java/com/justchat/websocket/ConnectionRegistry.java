@@ -49,4 +49,12 @@ public class ConnectionRegistry {
     public Set<WebSocketSession> getSessions(Long userId) {
         return sessionsByUserId.getOrDefault(userId, Set.of());
     }
+
+    public int onlineUserCount() {
+        return sessionsByUserId.size();
+    }
+
+    public int sessionCount() {
+        return sessionsByUserId.values().stream().mapToInt(Set::size).sum();
+    }
 }

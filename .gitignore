@@ -6,3 +6,17 @@ frontend/dist/
 .claude/
 CLAUDE.md
 .vscode/
+openspec/config.yaml
+openspec/changes/archive/2026-08-19-add-justchat-mvp/.openspec.yaml
+openspec/changes/archive/2026-08-19-add-justchat-mvp/design.md
+openspec/changes/archive/2026-08-19-add-justchat-mvp/proposal.md
+openspec/changes/archive/2026-08-19-add-justchat-mvp/tasks.md
+openspec/changes/archive/2026-08-19-add-justchat-mvp/specs/auth/spec.md
+openspec/changes/archive/2026-08-19-add-justchat-mvp/specs/chat-history/spec.md
+openspec/changes/archive/2026-08-19-add-justchat-mvp/specs/real-time-messaging/spec.md
+openspec/changes/archive/2026-08-19-add-justchat-mvp/specs/user-directory/spec.md
+openspec/specs/auth/spec.md
+openspec/specs/chat-history/spec.md
+openspec/specs/real-time-messaging/spec.md
+openspec/specs/user-directory/spec.md
+.superpowers/

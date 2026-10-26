@@ -19,7 +19,7 @@ export default function UserList({ selectedUserId, onSelect, unreadCounts }: {
   }, [query]);
 
   return (
-    <div style={{ width: 220, borderRight: '1px solid #ddd', height: '100vh', overflowY: 'auto' }}>
+    <div>
       <input
         placeholder="Search users..."
         value={query}
